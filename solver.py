@@ -1,8 +1,5 @@
 import time
-from collections import deque
 import heapq
-
-INFINITY = 999999
 
 DIRECTIONS = {
     'R': (0, 1),
@@ -33,7 +30,6 @@ class SokobanSolver:
         ]
 
         self.dead_space = self._generate_dead_space_matrix()
-        self.distance_map = self._precompute_goal_distances()
 
         self.fringe = []
         self.visited = set()
@@ -75,52 +71,6 @@ class SokobanSolver:
     def _valid_inner(self, r, c):
         return 0 < r < self.height - 1 and 0 < c < self.width - 1
 
-    # BFS Distance to Each Goal
-    def _precompute_goal_distances(self):
-        distmap = {}
-
-        for goal in self.goals_pos:
-            distmap[goal] = self._bfs_from_goal(goal)
-
-        return distmap
-
-    def _bfs_from_goal(self, start):
-        visited = [[False] * self.width for _ in range(self.height)]
-        dist = [[INFINITY] * self.width for _ in range(self.height)]
-        q = deque()
-
-        q.append(start)
-        dist[start[0]][start[1]] = 0
-
-        while q:
-            r, c = q.popleft()
-            if visited[r][c]:
-                continue
-
-            visited[r][c] = True
-
-            for dr, dc in DIRECTIONS.values():
-                nr, nc = r + dr, c + dc
-
-                if not self._in_bounds(nr, nc):
-                    continue
-                if self.board[nr][nc] == WALL:
-                    continue
-
-                if dist[nr][nc] > dist[r][c] + 1:
-                    dist[nr][nc] = dist[r][c] + 1
-                    q.append((nr, nc))
-
-        return dist
-
-    # Heuristic
-    def _heuristic(self, boxes):
-        total = 0
-        for bx, by in boxes:
-            best = min(self.distance_map[g][bx][by] for g in self.goals_pos)
-            total += best
-        return total
-
     # Core Search
     def _in_bounds(self, r, c):
         return 0 <= r < self.height and 0 <= c < self.width
@@ -154,12 +104,12 @@ class SokobanSolver:
         t0 = time.time()
 
         start_boxes = tuple(sorted(self.init_boxes_pos))
-        h = self._heuristic(start_boxes)
 
-        self._push_fringe(0, self.init_player_pos, start_boxes, "", h)
+        # Dijkstra: mulai dengan g=0, tanpa heuristik
+        self._push_fringe(0, self.init_player_pos, start_boxes, "")
 
         while self.fringe:
-            f, g, player, boxes, path = heapq.heappop(self.fringe)
+            g, player, boxes, path = heapq.heappop(self.fringe)
             self.visited_nodes_count += 1
 
             state = (player, boxes)
@@ -178,9 +128,9 @@ class SokobanSolver:
         self.time_used = time.time() - t0
         return None
 
-    def _push_fringe(self, g, player, boxes, path, h):
-        f = g + h
-        node = (f, g, player, boxes, path)
+    def _push_fringe(self, g, player, boxes, path):
+        # Dijkstra: prioritas hanya berdasarkan g (jumlah langkah)
+        node = (g, player, boxes, path)
 
         self.expanded_nodes_count += 1
 
@@ -211,5 +161,5 @@ class SokobanSolver:
             if (new_player, new_boxes) in self.visited:
                 continue
 
-            h = self._heuristic(new_boxes)
-            self._push_fringe(g + 1, new_player, new_boxes, path + move, h)
+            # Dijkstra: tidak ada heuristik, hanya tambah 1 langkah
+            self._push_fringe(g + 1, new_player, new_boxes, path + move)
